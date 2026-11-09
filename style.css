@@ -213,3 +213,4 @@ body.mode-music .ctl.big { width: 48px; height: 48px; }
   body.mode-music .video-wrap { margin: 14px 0 14px 14px; }
   body.mode-music .now-title { font-size: 16px; }
 }
+.btn.paste { width: 100%; margin-top: 10px; background: #fff; border: 1px solid var(--line); }

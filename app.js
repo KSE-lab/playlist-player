@@ -17,6 +17,7 @@ let loadToken = 0;       // 영상을 새로 띄울 때마다 +1
 let skippedToken = -1;   // 엔딩 스킵을 이미 한 영상(loadToken)
 let lastSaveAt = 0;
 let lastTickAt = 0;
+let endFixedToken = -1; // 끝 지점을 정확한 길이로 맞춘 영상(loadToken)
 let importJob = null;    // {listId, text}
 let myLists = null;      // 구글 계정의 유튜브 재생목록
 let myListsLoading = false;
@@ -60,6 +61,27 @@ function resumePoint(pl, track) {
   return 0;
 }
 
+function durationOf(id) { return S.get().durations?.[id] || S.get().positions[id]?.d || 0; }
+
+// 유튜브 플레이어가 스스로 멈출 지점(초). 엔딩 스킵 대상이 아니거나 길이를 모르면 null
+function endFor(pl, track) {
+  if (!S.get().settings.skipEnding) return null;
+  const sk = skipSeconds(pl?.ytId, track?.title || '');
+  const d = durationOf(track?.id);
+  return sk != null && d ? d - sk : null;
+}
+
+function cueCurrent(autoplay = false, at = null) {
+  const c = S.get().current; if (!c) return;
+  const pl = S.playlistById(c.playlistId); const tr = pl?.tracks.find(t => t.id === c.videoId);
+  if (!tr) return;
+  loadToken++;
+  const end = endFor(pl, tr);
+  let start = at ?? resumePoint(pl, tr);
+  if (end && start >= end - 2) start = 0;
+  player.load(c.videoId, start, autoplay, end);
+}
+
 function playTrack(playlistId, videoId, { autoplay = true, fromStart = false } = {}) {
   const pl = S.playlistById(playlistId); if (!pl) return;
   const track = pl.tracks.find(t => t.id === videoId); if (!track) return;
@@ -73,8 +95,10 @@ function playTrack(playlistId, videoId, { autoplay = true, fromStart = false } =
     s.history = [{ id: videoId, title: track.title, playlistId, at: now }, ...s.history.filter(h => h.id !== videoId)].slice(0, 100);
   });
   loadToken++;
-  player.load(videoId, start, autoplay);
-  if (start > 0) toast(`${fmt(start)}부터 이어서 재생해요`);
+  const end = endFor(pl, track);
+  const st0 = end && start >= end - 2 ? 0 : start;
+  player.load(videoId, st0, autoplay, end);
+  if (st0 > 0) toast(`${fmt(st0)}부터 이어서 재생해요`);
 }
 
 function markDone(id) {
@@ -161,6 +185,13 @@ function tick() {
   const pl = currentPlaylist(); const track = currentTrack();
   const sk = skipFor(pl, track); if (sk == null) return;
   const d = player.duration(); if (!d || d < sk + 5) return;
+  // 실제 길이를 기억하고, 유튜브 플레이어의 끝 지점도 정확하게 맞춰 둬요 (앱이 뒤로 가도 그 지점에서 멈추게)
+  if (Math.abs(durationOf(c.videoId) - d) > 0.05) S.update(s => { s.durations[c.videoId] = d; }, { render: false });
+  if (endFixedToken !== loadToken && document.visibilityState === 'visible' && player.state === STATE.PLAYING) {
+    endFixedToken = loadToken;
+    const want = d - sk;
+    if ((!player.endAt || Math.abs(player.endAt - want) > 0.1) && player.time() < want - 5) player.setEnd(want);
+  }
   // 다음 확인까지 흐를 시간만큼 미리 봐서, 늦지 않게 넘겨요
   const now = performance.now();
   const ahead = lastTickAt ? Math.min(0.1, ((now - lastTickAt) / 1000) * player.rate()) : 0;
@@ -176,18 +207,26 @@ function tick() {
 }
 function loop() { tick(); requestAnimationFrame(loop); }
 
+function finishAndNext() {
+  if (skippedToken === loadToken) return; // 이미 넘기는 중
+  skippedToken = loadToken;
+  hideCover();
+  const c = S.get().current;
+  if (c) markDone(c.videoId);
+  if (S.get().settings.autoplay) next({ auto: true });
+}
+
 function onPlayerState(st) {
   if (st === STATE.PLAYING) {
     if (cover.on && skippedToken !== loadToken) hideCover();
     fillTitleFromPlayer();
   }
-  if (st === STATE.PAUSED) savePosition(true);
-  if (st === STATE.ENDED) {
-    hideCover();
-    const c = S.get().current;
-    if (c) markDone(c.videoId);
-    if (S.get().settings.autoplay) next({ auto: true });
+  if (st === STATE.PAUSED) {
+    // 유튜브 플레이어가 정해 둔 끝 지점에서 멈춘 경우 → 다음 화
+    if (player.endAt && player.time() >= player.endAt - 0.6 && skippedToken !== loadToken) finishAndNext();
+    else savePosition(true);
   }
+  if (st === STATE.ENDED) finishAndNext();
   renderNow();
 }
 
@@ -201,6 +240,20 @@ function fillTitleFromPlayer() {
 }
 
 // ---------- 가져오기 ----------
+// 영상 길이를 미리 받아 두면, 처음부터 유튜브 플레이어에 끝 지점을 알려줄 수 있어요 (로그인 또는 API 키 필요)
+async function fillDurations(ids) {
+  if (!G.canUseYouTubeApi()) return;
+  const missing = [...new Set(ids)].filter(id => !S.get().durations?.[id]);
+  if (!missing.length) return;
+  try {
+    const map = await G.videoDurations(missing);
+    S.update(s => { s.durations = { ...(s.durations || {}), ...map }; }, { render: false });
+  } catch (e) { handleGoogleError(e); }
+}
+function fillAllDurations() {
+  fillDurations(S.livePlaylists().filter(p => SKIP_RULES[p.ytId]).flatMap(p => p.tracks.map(t => t.id)));
+}
+
 async function importPlaylist(listId, { startVideo = null } = {}) {
   if (importJob) { toast('지금 다른 재생목록을 가져오는 중이에요'); return; }
   if (!navigator.onLine) { toast('인터넷에 연결된 뒤에 가져올 수 있어요'); return; }
@@ -241,6 +294,7 @@ async function importPlaylist(listId, { startVideo = null } = {}) {
       }
     });
     importJob = null;
+    if (SKIP_RULES[listId]) fillDurations(tracks.map(t => t.id));
     toast(existing ? `업데이트했어요 · 영상 ${tracks.length}개` : `영상 ${tracks.length}개를 가져왔어요${res.partial ? ' · 제목은 조금씩 채워져요' : ''}`, 3200);
     view = { name: 'playlist', id };
     if (startVideo && tracks.some(t => t.id === startVideo)) playTrack(id, startVideo);
@@ -276,6 +330,22 @@ async function addFromInput() {
   toast('영상을 추가했어요');
   view = { name: 'playlist', id: pid };
   render();
+}
+
+// 유튜브 앱에서 '공유 → 링크 복사' 한 뒤 한 번에 가져오기
+async function pasteAndAdd() {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch (e) {}
+  const link = findYouTubeLink(text);
+  if (!link) { toast('복사한 유튜브 링크가 없어요. 유튜브 앱에서 공유 → 링크 복사를 먼저 해 주세요', 3800); return; }
+  const input = $('#add-input'); if (input) input.value = link;
+  addFromInput();
+}
+
+function findYouTubeLink(text) {
+  const m = String(text || '').match(/https?:\/\/[^\s]*(youtube\.com|youtu\.be)[^\s]*/i);
+  if (m) return m[0];
+  return I.parseInput(text) ? String(text).trim() : '';
 }
 
 async function loadMyLists() {
@@ -319,11 +389,12 @@ async function syncNow({ quiet = false } = {}) {
     if (remote) S.replace(merged);
     await G.pushState(S.get());
     sync = { status: 'ok', at: Date.now() };
+    fillAllDurations();
     // 다른 기기에서 보던 화가 더 최근이면 그 화로 맞춰 둬요 (재생은 직접 누르기)
     const cur = S.get().current;
     if (!playing && cur && (!prevCur || cur.videoId !== prevCur.videoId)) {
       const pl = S.playlistById(cur.playlistId); const tr = pl?.tracks.find(t => t.id === cur.videoId);
-      if (tr) { loadToken++; player?.load(cur.videoId, resumePoint(pl, tr), false); if (!quiet) toast('다른 기기에서 보던 화로 맞췄어요'); }
+      if (tr && player) { cueCurrent(false); if (!quiet) toast('다른 기기에서 보던 화로 맞췄어요'); }
     }
   } catch (e) {
     if (e instanceof G.AuthError) sync = { status: 'need-login', at: sync.at };
@@ -360,10 +431,7 @@ function setMode(mode) {
   applyMode();
   player?.destroy();
   createPlayer();
-  if (c) {
-    const pl = S.playlistById(c.playlistId); const tr = pl?.tracks.find(t => t.id === c.videoId);
-    if (tr) { loadToken++; player.load(c.videoId, at ?? resumePoint(pl, tr), wasPlaying); }
-  }
+  if (c) cueCurrent(wasPlaying, at);
   toast(mode === 'music' ? '음악 모드: 작은 플레이어로 재생해요' : '영상 모드: 재생하면 큰 화면으로 열리고 PIP를 쓸 수 있어요', 3200);
 }
 
@@ -560,6 +628,7 @@ function viewAdd() {
         <input id="add-input" type="url" inputmode="url" autocomplete="off" placeholder="https://youtube.com/playlist?list=…" enterkeyhint="go">
         <button class="btn primary" data-act="add" ${importJob ? 'disabled' : ''}>가져오기</button>
       </div>
+      <button class="btn paste" data-act="paste" ${importJob ? 'disabled' : ''}>${icon('link', 16)}복사한 링크 붙여넣고 바로 가져오기</button>
       <label class="target">영상 하나일 때 넣을 곳
         <select id="add-target">${lists.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}<option value="__new">새 재생목록 만들기</option></select>
       </label>
@@ -646,6 +715,7 @@ document.addEventListener('click', e => {
     case 'import': importPlaylist(el.dataset.list); break;
     case 'refresh': { const pl = S.playlistById(id); if (pl?.ytId) importPlaylist(pl.ytId); break; }
     case 'add': addFromInput(); break;
+    case 'paste': pasteAndAdd(); break;
     case 'rename': {
       const pl = S.playlistById(id); if (!pl) break;
       const name = prompt('재생목록 이름', pl.name);
@@ -707,12 +777,18 @@ async function start() {
   createPlayer();
 
   // 마지막에 보던 화를 띄워 둬요 (재생은 직접)
-  const c = S.get().current;
-  if (c) {
-    const pl = S.playlistById(c.playlistId); const tr = pl?.tracks.find(t => t.id === c.videoId);
-    if (tr) { loadToken++; player.load(c.videoId, resumePoint(pl, tr), false); }
-  }
+  cueCurrent(false);
   requestAnimationFrame(loop);
+
+  // 다른 앱에서 공유로 들어온 링크 (안드로이드 공유, 또는 ?add=링크)
+  const q = new URLSearchParams(location.search);
+  const shared = findYouTubeLink([q.get('add'), q.get('url'), q.get('text'), q.get('title')].filter(Boolean).join(' '));
+  if (q.has('add') || q.has('url') || q.has('text')) history.replaceState(null, '', location.pathname);
+  if (shared) {
+    view = { name: 'add' }; render();
+    const input = $('#add-input'); if (input) input.value = shared;
+    addFromInput();
+  }
   setInterval(tick, 100);
 
   if (r === 'ok') {

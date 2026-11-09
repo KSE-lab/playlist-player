@@ -9,6 +9,7 @@ function fresh() {
     playlists: [],          // {id, name, ytId, tracks:[{id,title}], updatedAt, deleted?}
     current: null,          // {playlistId, videoId, at}
     positions: {},          // videoId -> {t, d, done, at}
+    durations: {},          // videoId -> 영상 길이(초)
     lastByPlaylist: {},     // playlistId -> {videoId, at}
     history: [],            // {id, title, playlistId, at}
     settings: { autoplay: true, shuffle: false, repeat: false, skipEnding: true, mode: 'video', at: now },
@@ -94,6 +95,7 @@ export function merge(a, b) {
     return r;
   };
   out.positions = newest(a.positions, b.positions);
+  out.durations = { ...(a.durations || {}), ...(b.durations || {}) };
   out.lastByPlaylist = newest(a.lastByPlaylist, b.lastByPlaylist);
 
   const hist = [...(a.history || []), ...(b.history || [])].sort((x, y) => y.at - x.at);

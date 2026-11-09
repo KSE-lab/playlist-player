@@ -141,6 +141,21 @@ export async function playlistItems(listId, onProgress) {
   return tracks;
 }
 
+// 영상 길이(초) — 50개씩
+function isoSeconds(iso) {
+  const m = /P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || '');
+  if (!m) return 0;
+  return (+(m[1] || 0)) * 86400 + (+(m[2] || 0)) * 3600 + (+(m[3] || 0)) * 60 + (+(m[4] || 0));
+}
+export async function videoDurations(ids) {
+  const out = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    const d = await ytGet('videos', { part: 'contentDetails', id: ids.slice(i, i + 50).join(','), maxResults: '50' });
+    (d.items || []).forEach(it => { const sec = isoSeconds(it.contentDetails?.duration); if (sec) out[it.id] = sec; });
+  }
+  return out;
+}
+
 // ---- 구글 드라이브(앱 전용 숨김 폴더)에 상태 저장 ----
 const DRIVE = 'https://www.googleapis.com/drive/v3/files';
 let fileId = null;

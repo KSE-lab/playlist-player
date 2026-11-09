@@ -37,7 +37,7 @@ export class Player {
         width: '100%', height: '100%',
         playerVars: { playsinline: this.inline ? 1 : 0, rel: 0, modestbranding: 1, enablejsapi: 1, origin: location.origin },
         events: {
-          onReady: () => { this.ready = true; resolve(); if (this._pending) { const p = this._pending; this._pending = null; this.load(p.id, p.start, p.autoplay); } this.h.onReady?.(); },
+          onReady: () => { this.ready = true; resolve(); if (this._pending) { const p = this._pending; this._pending = null; this.load(p.id, p.start, p.autoplay, p.end); } this.h.onReady?.(); },
           onStateChange: e => { this.state = e.data; this._stamp = performance.now(); this.h.onState?.(e.data); },
           onError: e => this.h.onError?.(e.data),
         },
@@ -45,12 +45,23 @@ export class Player {
     });
   }
 
-  load(id, start = 0, autoplay = true) {
+  // end: 이 시간(초)에서 유튜브 플레이어가 스스로 영상을 끝내요 (앱이 뒤로 가 있어도)
+  load(id, start = 0, autoplay = true, end = null) {
     this.videoId = id;
     this._raw = start || 0; this._stamp = performance.now();
-    if (!this.ready) { this._pending = { id, start, autoplay }; return; }
-    const opts = { videoId: id, startSeconds: Math.max(0, Math.floor(start || 0)) };
+    this.endAt = end && end > (start || 0) + 1 ? end : null;
+    if (!this.ready) { this._pending = { id, start, autoplay, end }; return; }
+    const opts = { videoId: id, startSeconds: Math.max(0, start || 0) };
+    if (this.endAt) opts.endSeconds = this.endAt;
     if (autoplay) this.yt.loadVideoById(opts); else this.yt.cueVideoById(opts);
+  }
+
+  // 재생 중에 끝 지점을 정해요. 유튜브는 재생 중 변경을 지원하지 않아서 같은 위치에서 다시 불러와요.
+  setEnd(end) {
+    if (!this.ready || !this.videoId) return;
+    const t = this.time();
+    this.endAt = end;
+    this.yt.loadVideoById({ videoId: this.videoId, startSeconds: t, endSeconds: end });
   }
 
   destroy() {
