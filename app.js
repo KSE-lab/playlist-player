@@ -409,11 +409,10 @@ function trackRow(pl, t, idx, { compact = false } = {}) {
   const cur = S.get().current;
   const isCur = cur && cur.playlistId === pl.id && cur.videoId === t.id;
   const pr = progressOf(t.id);
-  const done = S.get().positions[t.id]?.done;
   return `<div class="track ${isCur ? 'current' : ''} ${compact ? 'compact' : ''}" data-act="play" data-pl="${esc(pl.id)}" data-id="${esc(t.id)}">
     <span class="num">${isCur ? icon('play', 12) : idx + 1}</span>
     <span class="thumb"><img loading="lazy" src="${thumb(t.id)}" alt=""><i style="width:${Math.round(pr * 100)}%"></i></span>
-    <span class="t-text"><span class="t-title">${esc(trackTitle(t))}</span>${done ? `<span class="t-meta done">${icon('check', 12)}다 봤어요</span>` : pr > 0 ? `<span class="t-meta">${Math.round(pr * 100)}% 봤어요</span>` : ''}</span>
+    <span class="t-text"><span class="t-title">${esc(trackTitle(t))}</span></span>
   </div>`;
 }
 
