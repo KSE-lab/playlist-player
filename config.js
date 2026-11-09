@@ -6,7 +6,7 @@ export const CONFIG = {
   YOUTUBE_API_KEY: '',
 };
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 
 // 먼작귀(먼가 작고 귀여운 녀석) 전편공개 재생목록
 export const MJG_PLAYLIST = 'PLsmaUhkCwW3q5q46uc9So2b4D-pZqVZOV';

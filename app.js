@@ -681,6 +681,20 @@ document.addEventListener('visibilitychange', () => {
     if (G.signedIn()) syncNow({ quiet: true });
   }
 });
+// 전체 화면이 되면 가로로 고정 (기기가 허용할 때만: 안드로이드 크롬 등. 아이폰 Safari는 웹에서 화면 방향을 고정할 수 없어요)
+function onFullscreen() {
+  const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  const o = screen.orientation;
+  if (!o || typeof o.lock !== 'function') return;
+  if (fs) {
+    // 유튜브 영상은 대부분 가로(16:9). 세로 영상(쇼츠)은 플레이어가 알려주지 않아서 가로로 고정해요.
+    o.lock('landscape').catch(() => {});
+  } else {
+    try { o.unlock(); } catch (e) {}
+  }
+}
+document.addEventListener('fullscreenchange', onFullscreen);
+document.addEventListener('webkitfullscreenchange', onFullscreen);
 window.addEventListener('pagehide', () => { savePosition(true); S.flush(); });
 window.addEventListener('online', () => { renderHeader(); if (G.signedIn()) syncNow({ quiet: true }); });
 window.addEventListener('offline', renderHeader);
