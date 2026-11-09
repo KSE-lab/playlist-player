@@ -1,5 +1,5 @@
 // 앱 화면을 기기에 저장해 두어 인터넷이 없어도 열리게 해요. (영상은 인터넷 필요)
-const CACHE = 'pp-1.3.0';
+const CACHE = 'pp-1.4.0';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'app.js', 'store.js', 'google.js', 'importer.js', 'player.js', 'skip.js', 'config.js', 'icons.js',
