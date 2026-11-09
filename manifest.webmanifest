@@ -1,0 +1,16 @@
+{
+  "name": "재생목록 플레이어",
+  "short_name": "플레이어",
+  "description": "유튜브 재생목록을 이어보고, 엔딩을 자동으로 건너뛰는 개인 플레이어",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f8",
+  "theme_color": "#ffffff",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

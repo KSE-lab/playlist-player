@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>재생목록 플레이어</title>
+  <meta name="description" content="유튜브 재생목록을 이어보고, 엔딩을 자동으로 건너뛰는 개인 플레이어">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="플레이어">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="logo"></span>재생목록 플레이어</div>
+      <div id="sync"></div>
+    </header>
+    <div id="offline" class="offline" hidden>인터넷에 연결되어 있지 않아요. 영상 재생에는 인터넷이 필요해요.</div>
+
+    <div class="layout">
+      <section class="player-col">
+        <div class="player-card">
+          <div class="video-wrap">
+            <div id="yt"></div>
+            <div id="video-empty" class="video-empty"><span class="logo big"></span><p>재생할 영상을 골라 주세요</p></div>
+            <div id="cover" class="cover"><span class="spinner"></span><p>다음 화로 넘어가는 중…</p></div>
+          </div>
+          <div id="now" class="now"></div>
+        </div>
+        <div id="upnext" class="upnext"></div>
+      </section>
+
+      <section class="content-col">
+        <nav id="tabs" class="tabs"></nav>
+        <main id="view" class="view"></main>
+      </section>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
