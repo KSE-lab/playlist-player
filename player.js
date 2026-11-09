@@ -18,8 +18,9 @@ export function loadApi() {
 }
 
 export class Player {
-  constructor(el, handlers = {}) {
+  constructor(el, handlers = {}, { inline = true } = {}) {
     this.el = el;
+    this.inline = inline;
     this.h = handlers;
     this.yt = null;
     this.ready = false;
@@ -34,7 +35,7 @@ export class Player {
     await new Promise(resolve => {
       this.yt = new YT.Player(this.el, {
         width: '100%', height: '100%',
-        playerVars: { playsinline: 1, rel: 0, modestbranding: 1, enablejsapi: 1, origin: location.origin },
+        playerVars: { playsinline: this.inline ? 1 : 0, rel: 0, modestbranding: 1, enablejsapi: 1, origin: location.origin },
         events: {
           onReady: () => { this.ready = true; resolve(); if (this._pending) { const p = this._pending; this._pending = null; this.load(p.id, p.start, p.autoplay); } this.h.onReady?.(); },
           onStateChange: e => { this.state = e.data; this._stamp = performance.now(); this.h.onState?.(e.data); },
@@ -50,6 +51,11 @@ export class Player {
     if (!this.ready) { this._pending = { id, start, autoplay }; return; }
     const opts = { videoId: id, startSeconds: Math.max(0, Math.floor(start || 0)) };
     if (autoplay) this.yt.loadVideoById(opts); else this.yt.cueVideoById(opts);
+  }
+
+  destroy() {
+    try { this.yt?.destroy(); } catch (e) {}
+    this.ready = false; this.yt = null;
   }
 
   play() { this.ready && this.yt.playVideo(); }

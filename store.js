@@ -11,7 +11,7 @@ function fresh() {
     positions: {},          // videoId -> {t, d, done, at}
     lastByPlaylist: {},     // playlistId -> {videoId, at}
     history: [],            // {id, title, playlistId, at}
-    settings: { autoplay: true, shuffle: false, repeat: false, skipEnding: true, at: now },
+    settings: { autoplay: true, shuffle: false, repeat: false, skipEnding: true, mode: 'video', at: now },
   };
 }
 

@@ -2,7 +2,7 @@ import * as S from './store.js';
 import * as G from './google.js';
 import * as I from './importer.js';
 import { Player, STATE } from './player.js';
-import { skipSeconds, describeRules, episodeOf, SKIP_RULES } from './skip.js';
+import { skipSeconds, episodeOf, SKIP_RULES } from './skip.js';
 import { MJG_PLAYLIST, APP_VERSION } from './config.js';
 import { icon } from './icons.js';
 
@@ -333,8 +333,49 @@ async function syncNow({ quiet = false } = {}) {
   render();
 }
 
+
+// ---------- 음악 / 영상 모드 ----------
+// 영상: 아이폰에서 재생하면 전체 화면 플레이어로 열려서 PIP(화면 속 화면)를 쓸 수 있어요.
+// 음악: 화면 안에서 작은 플레이어로 재생하고 목록을 크게 보여요.
+function createPlayer() {
+  if (!document.getElementById('yt')) {
+    const d = document.createElement('div'); d.id = 'yt';
+    $('.video-wrap').prepend(d);
+  }
+  const inline = S.get().settings.mode === 'music';
+  player = new Player('yt', {
+    onState: onPlayerState, onReady: () => renderNow(),
+    onError: () => { toast('이 영상은 재생할 수 없어요. 다음 영상으로 넘어가요'); next({ auto: true }); },
+  }, { inline });
+  player.init().catch(() => toast('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요', 4000));
+}
+
+function setMode(mode) {
+  if (S.get().settings.mode === mode) return;
+  const wasPlaying = player && (player.state === STATE.PLAYING || player.state === STATE.BUFFERING);
+  savePosition(true);
+  const c = S.get().current;
+  const at = player?.ready && c && player.dataId() === c.videoId ? player.time() : null;
+  S.update(s => { s.settings.mode = mode; s.settings.at = Date.now(); });
+  applyMode();
+  player?.destroy();
+  createPlayer();
+  if (c) {
+    const pl = S.playlistById(c.playlistId); const tr = pl?.tracks.find(t => t.id === c.videoId);
+    if (tr) { loadToken++; player.load(c.videoId, at ?? resumePoint(pl, tr), wasPlaying); }
+  }
+  toast(mode === 'music' ? '음악 모드: 작은 플레이어로 재생해요' : '영상 모드: 재생하면 큰 화면으로 열리고 PIP를 쓸 수 있어요', 3200);
+}
+
+function applyMode() {
+  const m = S.get().settings.mode || 'video';
+  document.body.classList.toggle('mode-music', m === 'music');
+  $('#mode').innerHTML = [['music', '음악'], ['video', '영상']].map(([k, l]) =>
+    `<button class="${m === k ? 'on' : ''}" data-act="mode" data-mode="${k}" role="tab" aria-selected="${m === k}">${l}</button>`).join('');
+}
+
 // ---------- 화면 ----------
-function render() { renderHeader(); renderNow(); renderTabs(); renderView(); }
+function render() { applyMode(); renderHeader(); renderNow(); renderTabs(); renderView(); }
 
 function renderHeader() {
   const el = $('#sync');
@@ -365,7 +406,7 @@ function renderNow() {
       <div class="now-title">${track ? esc(trackTitle(track)) : '재생할 영상을 골라 주세요'}</div>
       <div class="now-sub">
         ${pl ? `<button class="link" data-act="open" data-id="${esc(pl.id)}">${esc(pl.name)}</button><span>${i + 1} / ${pl.tracks.length}</span>` : '<span>보관함에서 재생목록을 골라요</span>'}
-        ${sk != null && st.skipEnding ? `<span class="pill" title="엔딩 자동 스킵">${icon('skip', 13)}엔딩 ${sk}초 스킵${ep != null ? ` · ${ep}화` : ''}</span>` : ''}
+        ${sk != null && st.skipEnding ? `<span class="pill" title="엔딩 자동 스킵">${icon('skip', 13)}엔딩 스킵</span>` : ''}
       </div>
     </div>
     <div class="controls">
@@ -440,7 +481,7 @@ function mjgCard() {
   if (S.get().playlists.some(p => p.ytId === MJG_PLAYLIST && !p.deleted)) return '';
   const busy = importJob?.listId === MJG_PLAYLIST;
   return `<div class="card suggest">
-    <div><strong>먼작귀 전편공개 재생목록</strong><p>엔딩 자동 스킵이 켜진 재생목록이에요. ${esc(describeRules(MJG_PLAYLIST))}</p></div>
+    <div><strong>먼작귀 전편공개 재생목록</strong><p>엔딩 자동 스킵이 켜진 재생목록이에요.</p></div>
     <button class="btn primary" data-act="import" data-list="${MJG_PLAYLIST}" ${importJob ? 'disabled' : ''}>${busy ? '가져오는 중…' : '가져오기'}</button>
   </div>`;
 }
@@ -488,7 +529,6 @@ function viewPlaylist() {
       <button class="icon-btn" data-act="rename" data-id="${esc(pl.id)}" aria-label="이름 바꾸기">${icon('edit', 18)}</button>
       <button class="icon-btn danger" data-act="delete" data-id="${esc(pl.id)}" aria-label="삭제">${icon('trash', 18)}</button>
     </div>
-    ${SKIP_RULES[pl.ytId] ? `<p class="note">${icon('skip', 14)}엔딩 자동 스킵: ${esc(describeRules(pl.ytId))}</p>` : ''}
     ${importLine()}
     <div class="tracks">${pl.tracks.map((t, i) => trackRow(pl, t, i)).join('')}</div>`;
 }
@@ -564,7 +604,7 @@ function viewSettings() {
   return `<div class="view-head"><h2>설정</h2></div>
     <div class="card list">
       ${toggleRow('autoplay', '다음 영상 자동 재생', '')}
-      ${toggleRow('skipEnding', '엔딩 자동 스킵', `먼작귀 재생목록: ${esc(describeRules(MJG_PLAYLIST))}`)}
+      ${toggleRow('skipEnding', '엔딩 자동 스킵', '먼작귀 재생목록에서 엔딩을 건너뛰어요')}
       ${toggleRow('shuffle', '셔플', '')}
       ${toggleRow('repeat', '반복', '마지막 영상 다음에 처음으로')}
     </div>
@@ -618,6 +658,7 @@ document.addEventListener('click', e => {
       S.update(s => { const p = s.playlists.find(x => x.id === id); p.deleted = true; p.tracks = []; p.updatedAt = Date.now(); if (s.current?.playlistId === id) s.current = null; });
       view = { name: 'library' }; render(); break;
     }
+    case 'mode': setMode(el.dataset.mode); break;
     case 'login': login(); break;
     case 'logout': G.signOut(); sync = { status: 'off', at: 0 }; myLists = null; render(); break;
     case 'sync': syncNow(); break;
@@ -635,7 +676,10 @@ S.subscribe(({ render: r }) => { schedulePush(); if (r) { renderNow(); renderVie
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { savePosition(true); S.flush(); if (G.signedIn()) syncNow({ quiet: true }); }
-  else if (G.signedIn()) syncNow({ quiet: true });
+  else {
+    if (player?.ready && player.state === STATE.ENDED && S.get().settings.autoplay) next({ auto: true });
+    if (G.signedIn()) syncNow({ quiet: true });
+  }
 });
 window.addEventListener('pagehide', () => { savePosition(true); S.flush(); });
 window.addEventListener('online', () => { renderHeader(); if (G.signedIn()) syncNow({ quiet: true }); });
@@ -646,8 +690,7 @@ async function start() {
   if (r === 'need-login') sync.status = 'need-login';
   render();
 
-  player = new Player('yt', { onState: onPlayerState, onReady: () => renderNow(), onError: () => toast('이 영상은 재생할 수 없어요. 다음 영상으로 넘어가요') || next({ auto: true }) });
-  player.init().catch(() => toast('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요', 4000));
+  createPlayer();
 
   // 마지막에 보던 화를 띄워 둬요 (재생은 직접)
   const c = S.get().current;
