@@ -406,33 +406,24 @@ async function syncNow({ quiet = false } = {}) {
 
 
 // ---------- 음악 / 영상 모드 ----------
-// 영상: 아이폰에서 재생하면 전체 화면 플레이어로 열려서 PIP(화면 속 화면)를 쓸 수 있어요.
-// 음악: 화면 안에서 작은 플레이어로 재생하고 목록을 크게 보여요.
+// 두 모드 모두 화면 안에서 재생해요. (전체 화면은 플레이어의 전체 화면 버튼으로)
+// 영상: 큰 플레이어. 음악: 작은 플레이어 + 큰 목록.
 function createPlayer() {
   if (!document.getElementById('yt')) {
     const d = document.createElement('div'); d.id = 'yt';
     $('.video-wrap').prepend(d);
   }
-  const inline = S.get().settings.mode === 'music';
   player = new Player('yt', {
     onState: onPlayerState, onReady: () => renderNow(),
     onError: () => { toast('이 영상은 재생할 수 없어요. 다음 영상으로 넘어가요'); next({ auto: true }); },
-  }, { inline });
+  }, { inline: true });
   player.init().catch(() => toast('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요', 4000));
 }
 
 function setMode(mode) {
   if (S.get().settings.mode === mode) return;
-  const wasPlaying = player && (player.state === STATE.PLAYING || player.state === STATE.BUFFERING);
-  savePosition(true);
-  const c = S.get().current;
-  const at = player?.ready && c && player.dataId() === c.videoId ? player.time() : null;
   S.update(s => { s.settings.mode = mode; s.settings.at = Date.now(); });
   applyMode();
-  player?.destroy();
-  createPlayer();
-  if (c) cueCurrent(wasPlaying, at);
-  toast(mode === 'music' ? '음악 모드: 작은 플레이어로 재생해요' : '영상 모드: 재생하면 큰 화면으로 열리고 PIP를 쓸 수 있어요', 3200);
 }
 
 function applyMode() {
